@@ -21,7 +21,11 @@ require 'memcache'
 # per robey: marshall must be set to false otherwise we'll feed marshalled data to apache
 # and apache doesn't work with marshalled data.
 #
-@cache.delete("mb:b:1")
-@cache.delete("mb:b:2")
-@cache.delete("mb:b:3")
-@cache.delete("mb:b:4")
+
+
+for x in 1..4 
+  @cache.delete("mb:b:#{x}")
+end
+
+puts "blocks deleted."
+

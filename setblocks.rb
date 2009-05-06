@@ -27,3 +27,11 @@ require 'memcache'
 # ipv6
 @cache.set("mb:b:4",'::1',0,true)
 
+
+# whitelist test
+@cache.set("mb:w:4",'::1',0,true)
+
+puts "blocks set:"
+for x in 1..4 
+    puts "#{x} = " + @cache.get("mb:b:#{x}",true)
+end

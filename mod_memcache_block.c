@@ -87,6 +87,7 @@ typedef struct mb_cfg {
   int expiration;  /* default object expiration - only used on set */
   int refresh;     /* blocklist lifetime */
   int maxblocks;   /* maximum number of blocks - should this be a key? */
+  time_t blocklist_last_refresh; /* private copy of this */ 
   apr_hash_t *response_limiter;
 
 } mb_cfg;
@@ -102,9 +103,8 @@ static apr_pool_t *mb_private_pool = NULL;
 static apr_thread_mutex_t *blocklistlock = NULL;
 
 /* updates to the next two variables should only be by mutex */
-static apr_table_t *blocklist_table = NULL;
-
-time_t blocklist_last_refresh;
+static apr_table_t *blacklist_table = NULL;
+static apr_table_t *whitelist_table = NULL;
 
 /* global pointer to the memcache pool */
 memcached_st *mb_memcache = NULL;
@@ -213,16 +213,19 @@ static mb_refresh_blocklist(server_rec *s)
   mb_cfg *cfg;
   char *result;
   char key[255];
-  cfg = our_sconfig(s);
   int bnum;
   memcached_result_st *rv;
   memcached_return mc_error;
   size_t len;
-  int entries = 0;
+  int bl_entries = 0;
+  int wl_entries = 0;
   unsigned int flags;
+
+  cfg = our_sconfig(s);
 
   ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
 	       "Blocklist refresh start");
+
   /* lock mutex */
   apr_thread_mutex_lock(blocklistlock);
 
@@ -230,25 +233,34 @@ static mb_refresh_blocklist(server_rec *s)
      bad actors might sneak in when BL is empty
    */
 
-  if (blocklist_table == NULL) {
+  if (blacklist_table == NULL) {
     /* need to create it */
     ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
-	       "Blocklist create");
-    blocklist_table = apr_table_make(mb_private_pool, cfg->maxblocks);
+	       "Blacklist create");
+    blacklist_table = apr_table_make(mb_private_pool, cfg->maxblocks);
   } else {
-    apr_table_clear(blocklist_table);
+    apr_table_clear(blacklist_table);
   }
 
-  /* load blocklist */
+  if (whitelist_table == NULL) {
+    /* need to create it */
+    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
+	       "Whitelist create");
+    whitelist_table = apr_table_make(mb_private_pool, cfg->maxblocks);
+  } else {
+    apr_table_clear(whitelist_table);
+  }
+
+  /* load blacklist */
   for (bnum=0; bnum < cfg->maxblocks; bnum++) {
     snprintf(key, 254, "%s:b:%d",cfg->prefix,bnum);
     result = memcached_get(mb_memcache, key, strlen(key), &len, &flags, &mc_error);
 
     if (result != NULL) {
       ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
-		   "FOUND: key %s = %s ",key,result);
-      apr_table_set(blocklist_table,key,result);
-      entries++;
+		   "(BL) FOUND: key %s = %s ",key,result);
+      apr_table_set(blacklist_table,key,result);
+      bl_entries++;
     }
 
     if (mc_error != MEMCACHED_SUCCESS && mc_error != MEMCACHED_NOTFOUND) {
@@ -257,9 +269,29 @@ static mb_refresh_blocklist(server_rec *s)
     }
   }
 
+  /* load whitelist */
+  for (bnum=0; bnum < cfg->maxblocks; bnum++) {
+    snprintf(key, 254, "%s:w:%d",cfg->prefix,bnum);
+    result = memcached_get(mb_memcache, key, strlen(key), &len, &flags, &mc_error);
+
+    if (result != NULL) {
+      ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
+		   "(WL) FOUND: key %s = %s ",key,result);
+      apr_table_set(whitelist_table,key,result);
+      wl_entries++;
+    }
+
+    if (mc_error != MEMCACHED_SUCCESS && mc_error != MEMCACHED_NOTFOUND) {
+      ap_log_error(APLOG_MARK, APLOG_ERR, 0, s,
+		   "Memcache Error: key %s: %s",key, memcached_strerror(mb_memcache,mc_error));
+    }
+  }
+
+
   ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
-	       "Blocklist refresh complete (%d entries found)",entries);
-  blocklist_last_refresh = time(NULL);
+	       "List refresh complete (%d BL, %d WL entries found)",bl_entries,wl_entries);
+
+  cfg->blocklist_last_refresh = time(NULL);
 
   /* unlock mutex */
   apr_thread_mutex_unlock(blocklistlock);
@@ -365,7 +397,7 @@ static int mb_init(apr_pool_t * p, apr_pool_t * plog,
    * Set up any module cells that ought to be initialised.
    */
   setup_module_cells();
-  ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s, "child init called.");
+  ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s, "Child init called.");
   apr_pool_cleanup_register(p, s, mb_child_exit, mb_child_exit);
 
   mb_memcache = memcached_create(NULL);
@@ -409,23 +441,28 @@ int mb_check_ip(void *rec, const char *key, const char *value)
     }
   }
   
+  /* true = continue iterating (not found), false = stop iterating (found) */
   return TRUE;
 }
 
 static int mb_access_checker(request_rec *r)
 {
-  mb_cfg *cfg;
+  mb_cfg *sconf;
   char *result;
   char key[255];
   uint32_t flags; 
   size_t len;
-  mb_cfg *sconf;
   memcached_return mc_error;
 
   sconf = our_sconfig(r->server);
 
   /* before we perform our lookup, is it time to refresh the table? */
-  if ((time(NULL) - blocklist_last_refresh) > cfg->refresh ) {
+    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
+	       "blocklist timers %d %d %d %d ",time(NULL), sconf->blocklist_last_refresh, sconf->refresh,
+	       (time(NULL) - sconf->blocklist_last_refresh));
+ 
+
+  if ((time(NULL) - sconf->blocklist_last_refresh) > sconf->refresh ) {
     mb_refresh_blocklist(r->server);
   }
   
@@ -439,9 +476,9 @@ static int mb_access_checker(request_rec *r)
     }
   }
 
-
   /* do we have an entry in the blacklist? */
-  if (apr_table_do(mb_check_ip, r->connection->remote_ip, blocklist_table,NULL) == FALSE) {
+  if ((apr_table_do(mb_check_ip, r->connection->remote_ip, blacklist_table, NULL) == FALSE) && 
+      (apr_table_do(mb_check_ip, r->connection->remote_ip, whitelist_table, NULL) == TRUE)) { 
     return HTTP_FORBIDDEN;
   } else {
    return DECLINED;

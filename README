@@ -68,6 +68,9 @@ MBTableRefresh n
        How long to wait between refreshes of the block table. Do not
        set this to a low value, or the server will spend lots of time
        during request processing reloading the white/blacklist tables.
+       
+       This translates into ((2 * MBMaxBlocks) * Workers) memcached
+       gets every n seconds.
 
 MBMaxBlocks n	
        The size of the block table (the number of keys to look for in memcached)
@@ -122,12 +125,15 @@ PREFIX:w:n	   (where 0 < n < max_blocks-1)     "whitelist"
 
 PREFIX:b:n	   (where 0 < n < max_blocks-1)     "blacklist"
 
-   The list of ranges to blacklist, in the same format as the whitelist.
+   The list of ranges to blacklist, in the same format as the
+   whitelist.  If the user is in the whitelist and the blacklist, the
+   whitelist takes precedence. 
 
 PREFIX:c:IP_ADDRESS:response_code          "counter"
-PREFIX:l:IP_ADDRESS:response_code          "last_time"
+PREFIX:t:IP_ADDRESS:response_code          "last_time"
 
-   These two keys track the last time (l)  and number of times (i)
+   These two keys track the last time (l) and number of times (c) the
+   response code has been hit by an IP.
 
 PREFIX:d:IP_ADDRESS                        "Deny"
 
