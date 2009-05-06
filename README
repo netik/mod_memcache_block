@@ -1,0 +1,22 @@
+Add the following lines to your Apache configuration, in the global area.
+Only one configuration may exist. 
+
+<IfModule memcache_block_module>
+MBEnable On
+# You must set timeout BEFORE the server list.  If you want to have
+# different timeouts for different sets of servers, just change it
+# before adding more servers.
+MBTimeout 2
+MBServers 127.0.0.1:11211
+MBPrefix block
+MBExpiration 3600
+# if you change the size of MaxBlocks, you must restart the server.
+MBMaxBlocks 10
+MBDebugLevel 9
+
+# if the rate limiting code is enabled, we limit by HTTP result code
+MBWhiteList 127.0.0.1
+MBWhiteList 10.0.0.0/8
+MBRateLimitByResult 401 20 3600
+
+</IfModule>
