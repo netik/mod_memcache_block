@@ -1,8 +1,10 @@
-- fix intervals, it locks out after n hits and dies
+Mod_memcache_block TODO's
+----------------------------
 
-- zero out counter key whenever we insert an L key
+- Fix limiter code: fix intervals, it locks out after n hits and dies
 
-- figure out rest of limiter code
+- zero out counter key whenever we insert an L key, because we no longer need it. 
+  - zero out counter when date expiry reached. 
 
 - make sure keys expire at the right time
 
