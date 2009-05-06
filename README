@@ -1,8 +1,95 @@
+mod_memcache_block v0.99 (beta)
+John Adams <jna@twitter.com>
+May 6, 2009
+
+mod_memcache_block is an Apache module that allows you to block access
+to your servers using a block list stored in memcache. It also offers
+distributed rate limiting based on HTTP response code.
+
+FEATURES
+---------
+
+   - Distributed White and Black listing of IPs, ranges, and CIDR
+     blocks
+
+   - Configurable timeouts, memcache server listings
+   
+   - Support for continuous hasing using libmemcached's Ketama
+
+   - Windowded Rate limiting based on Response code (to block
+     brute-force dictionary attacks against .htpasswd, for example)
+
+REQUIREMENTS
+------------
+   - libmemcached-0.25 or better
+
+   - Memcached server 
+
+   - Apache 2.x (tested with 2.2.11)
+
+INSTALLATION
+------------
+
+1. Install libmemcached-0.25 or better.
+
+2. Install memcached-1.26
+
+3. Edit the Makefile to indicate the location of libmemcached
+
+4. Type "make", then "make install"
+
+5. Update your apache configuration
+
+6. Restart the server with apachectl restart
+
+
+CONFIGURATION
+-------------
+
+The following configuration directives are used by mod_memcache_block:
+
+MBEnable On|Off
+       Default: On
+       On or Off, controls if this module is enabled or not (default on)
+
+MBServers serverlist
+       A list of participating memcache servers, in the form 
+      (servername:port,servername:port...) 
+
+MBPrefix n	
+       The Memcache key prefix prepended to key
+
+MBTimeout n	
+       The timeout, in microseconds, to wait for a backend memcached 
+
+MBExpiration n
+       The Duration, in seconds, of an automatic rate-limit based block
+
+MBTableRefresh n
+       How long to wait between refreshes of the block table
+
+MBMaxBlocks n	
+       The size of the block table (the number of keys to look for in memcached)
+       A Restart is required if this value changes. 
+
+MBRateLimit On|Off
+       Default: On
+       Whether or not the module honors ResponseLimit directives.
+
+MBResponseLimit CODE COUNT PERIOD
+       If the module receives more than COUNT responses with HTTP
+       response code CODE within PERIOD seconds, add the IP to memcache
+       with a TTL of MBExpiration seconds. 
+
+EXAMPLE
+--------
+
 Add the following lines to your Apache configuration, in the global area.
 Only one configuration may exist. 
 
 <IfModule memcache_block_module>
 MBEnable On
+
 # You must set timeout BEFORE the server list.  If you want to have
 # different timeouts for different sets of servers, just change it
 # before adding more servers.
@@ -10,13 +97,10 @@ MBTimeout 2
 MBServers 127.0.0.1:11211
 MBPrefix block
 MBExpiration 3600
+
 # if you change the size of MaxBlocks, you must restart the server.
 MBMaxBlocks 10
-MBDebugLevel 9
 
-# if the rate limiting code is enabled, we limit by HTTP result code
-MBWhiteList 127.0.0.1
-MBWhiteList 10.0.0.0/8
 MBRateLimitByResult 401 20 3600
 
 </IfModule>
