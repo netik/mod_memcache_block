@@ -27,59 +27,44 @@ mod_memcache_block is an Apache module that allows you to block access to your s
 
 == INSTALLATION
 
-#. Install libmemcached-0.25 or better.
-
-#. Install memcached-1.26
-
-#. Edit the Makefile to indicate the location of libmemcached
-
-#. Type "make", then "make install"
-
-#. Update your apache configuration
-
-#. Restart the server with apachectl restart
+1. Install libmemcached-0.25 or better.
+2. Install memcached-1.26
+3. Edit the Makefile to indicate the location of libmemcached
+4. Type "make", then "make install"
+5. Update your apache configuration
+6. Restart the server with apachectl restart
 
 == CONFIGURATION
 
 The following configuration directives are used by mod_memcache_block:
 
-MBEnable On|Off
-       Default: On
-       On or Off, controls if this module is enabled or not (default on)
+[MBEnable On|Off]   Default: On
+	            On or Off, controls if this module is enabled or not (default on)
 
-MBServers serverlist
-       A list of participating memcache servers, in the form 
-      (servername:port,servername:port...) 
+[MBServers serverlist]    A list of participating memcache servers, in the form 
+	                  (servername:port,servername:port...) 
 
-MBPrefix n	
-       The Memcache key prefix prepended to all keys
+[MBPrefix n]              The Memcache key prefix prepended to all keys
 
-MBTimeout n	
-       The timeout, in microseconds, to wait for a backend memcached 
+[MBTimeout n]             The timeout, in microseconds, to wait for a backend memcached 
 
-MBExpiration n
-       The Duration, in seconds, of an automatic rate-limit based block
+[MBExpiration n]          The Duration, in seconds, of an automatic rate-limit based block
 
-MBTableRefresh n 
-       How long to wait between refreshes of the block table. Do not
-       set this to a low value, or the server will spend lots of time
-       during request processing reloading the white/blacklist tables.
-       
-       This translates into ((2 * MBMaxBlocks) * Workers) memcached
-       gets every n seconds.
+[MBTableRefresh n]        How long to wait between refreshes of the block table. Do not
+		          set this to a low value, or the server will spend lots of time
+			  during request processing reloading the white/blacklist tables.
+                          This translates into ((2 * MBMaxBlocks) * Workers) memcached
+			  gets every n seconds.
 
-MBMaxBlocks n	
-       The size of the block table (the number of keys to look for in memcached)
-       A Restart is required if this value changes. 
+[MBMaxBlocks n]           The size of the block table (the number of keys to look for in memcached)
+                          A Restart is required if this value changes. 
 
-MBRateLimit On|Off
-       Default: On
-       Whether or not the module honors ResponseLimit directives.
+[MBRateLimit On|Off]      Default: On
+	                  Whether or not the module honors ResponseLimit directives.
 
-MBResponseLimit CODE COUNT PERIOD
-       If the module receives more than COUNT responses with HTTP
-       response code CODE within PERIOD seconds, add the IP to memcache
-       with a TTL of MBExpiration seconds. 
+[MBResponseLimit CODE COUNT PERIOD]       If the module receives more than COUNT responses with HTTP
+		                          response code CODE within PERIOD seconds, add the IP to memcache
+                                          with a TTL of MBExpiration seconds. 
 
 == EXAMPLE
 
