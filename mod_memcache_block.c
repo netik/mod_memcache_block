@@ -472,6 +472,8 @@ static int mb_access_checker(request_rec *r)
 
   if (result) { 
     if (*result == '1') {
+      ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
+		   "Deny IP %s (ratelimit)",r->connection->remote_ip);
       return HTTP_FORBIDDEN;
     }
   }
@@ -479,6 +481,8 @@ static int mb_access_checker(request_rec *r)
   /* do we have an entry in the blacklist? */
   if ((apr_table_do(mb_check_ip, r->connection->remote_ip, blacklist_table, NULL) == FALSE) && 
       (apr_table_do(mb_check_ip, r->connection->remote_ip, whitelist_table, NULL) == TRUE)) { 
+    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
+		 "Deny IP %s (blacklist)",r->connection->remote_ip,key);
     return HTTP_FORBIDDEN;
   } else {
    return DECLINED;
@@ -711,8 +715,7 @@ static const command_rec mb_cmds[] =
 
 
 /*
- * Module definition for configuration.  If a particular callback is not
- * needed, replace its routine name below with the word NULL.
+ * Declare our callbacks
  */
 module AP_MODULE_DECLARE_DATA memcache_block_module =
 {
