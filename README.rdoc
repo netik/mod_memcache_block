@@ -106,9 +106,7 @@ mod_memcache_block writes and uses many keys in memcache. They are:
    whitelist takes precedence. 
 
 [PREFIX:c:IP_ADDRESS:response_code          "counter"]
-[PREFIX:t:IP_ADDRESS:response_code          "last_time"]
-   These two keys track the last time (l) and number of times (c) the
-   response code has been hit by an IP.
+   The number of times the address and response code tuple has been seen					   
 
 [PREFIX:d:IP_ADDRESS                        "Deny"]
    If this memcache key exists, access is denied to the site. The
