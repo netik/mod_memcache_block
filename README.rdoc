@@ -88,8 +88,7 @@ Add the following lines to your Apache configuration, in the global area. Only o
 
 mod_memcache_block writes and uses many keys in memcache. They are:
 
-PREFIX:w:n	   (where 0 < n < max_blocks-1)     "whitelist"
-
+[PREFIX:w:n	   (where 0 < n < max_blocks-1)     "whitelist"]
    The list of ranges to whitelist, in one of the following forms:
 
       exact_string    An exact string to match against the remote IP (i.e. ::1 or 127.0.0.1)
@@ -101,20 +100,17 @@ PREFIX:w:n	   (where 0 < n < max_blocks-1)     "whitelist"
    out of cache! It's a good idea to refresh the list periodically and
    to run a dedicated set of servers to manage blocks.
 
-PREFIX:b:n	   (where 0 < n < max_blocks-1)     "blacklist"
-
+[PREFIX:b:n	   (where 0 < n < max_blocks-1)     "blacklist"]
    The list of ranges to blacklist, in the same format as the
    whitelist.  If the user is in the whitelist and the blacklist, the
    whitelist takes precedence. 
 
-PREFIX:c:IP_ADDRESS:response_code          "counter"
-PREFIX:t:IP_ADDRESS:response_code          "last_time"
-
+[PREFIX:c:IP_ADDRESS:response_code          "counter"]
+[PREFIX:t:IP_ADDRESS:response_code          "last_time"]
    These two keys track the last time (l) and number of times (c) the
    response code has been hit by an IP.
 
-PREFIX:d:IP_ADDRESS                        "Deny"
-
+[PREFIX:d:IP_ADDRESS                        "Deny"]
    If this memcache key exists, access is denied to the site. The
    difference between this key, and the blacklist (b) key, is that
    this key is automatically created with a TTL of MBExpiration when
