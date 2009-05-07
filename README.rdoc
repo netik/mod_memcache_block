@@ -1,0 +1,145 @@
+= mod_memcache_block v0.99 (beta)
+
+John Adams <jna@twitter.com>
+May 6, 2009
+
+== Description
+
+mod_memcache_block is an Apache module that allows you to block access to your servers using a block list stored in memcache. It also offers distributed rate limiting based on HTTP response code.
+
+== FEATURES
+
+ * Distributed White and Black listing of IPs, ranges, and CIDR blocks
+
+ * Configurable timeouts, memcache server listings
+   
+ * Support for continuous hasing using libmemcached's Ketama
+
+ * Windowded Rate limiting based on Response code (to block brute-force dictionary attacks against .htpasswd, for example)
+
+== REQUIREMENTS
+
+ * libmemcached-0.25 or better
+
+ * Memcached server 
+
+ * Apache 2.x (tested with 2.2.11)
+
+== INSTALLATION
+
+ #. Install libmemcached-0.25 or better.
+
+ #. Install memcached-1.26
+
+ #. Edit the Makefile to indicate the location of libmemcached
+
+ #. Type "make", then "make install"
+
+ #. Update your apache configuration
+
+ #. Restart the server with apachectl restart
+
+== CONFIGURATION
+
+The following configuration directives are used by mod_memcache_block:
+
+{{{
+MBEnable On|Off
+       Default: On
+       On or Off, controls if this module is enabled or not (default on)
+
+MBServers serverlist
+       A list of participating memcache servers, in the form 
+      (servername:port,servername:port...) 
+
+MBPrefix n	
+       The Memcache key prefix prepended to all keys
+
+MBTimeout n	
+       The timeout, in microseconds, to wait for a backend memcached 
+
+MBExpiration n
+       The Duration, in seconds, of an automatic rate-limit based block
+
+MBTableRefresh n 
+       How long to wait between refreshes of the block table. Do not
+       set this to a low value, or the server will spend lots of time
+       during request processing reloading the white/blacklist tables.
+       
+       This translates into ((2 * MBMaxBlocks) * Workers) memcached
+       gets every n seconds.
+
+MBMaxBlocks n	
+       The size of the block table (the number of keys to look for in memcached)
+       A Restart is required if this value changes. 
+
+MBRateLimit On|Off
+       Default: On
+       Whether or not the module honors ResponseLimit directives.
+
+MBResponseLimit CODE COUNT PERIOD
+       If the module receives more than COUNT responses with HTTP
+       response code CODE within PERIOD seconds, add the IP to memcache
+       with a TTL of MBExpiration seconds. 
+}}}
+
+== EXAMPLE
+
+Add the following lines to your Apache configuration, in the global area. Only one configuration may exist. 
+
+{{{
+<IfModule memcache_block_module>
+MBEnable On
+# You must set timeout BEFORE the server list.  If you want to have
+# different timeouts for different sets of servers, just change it
+# before adding more servers.
+MBTimeout 2
+MBServers 127.0.0.1:11211
+MBPrefix block
+MBExpiration 3600
+# if you change the size of MaxBlocks, you must restart the server.
+MBMaxBlocks 10
+MBRateLimitByResult 401 20 3600
+</IfModule>
+}}}
+
+== KEY STORAGE
+
+mod_memcache_block writes and uses many keys in memcache. They are:
+
+PREFIX:w:n	   (where 0 < n < max_blocks-1)     "whitelist"
+
+   The list of ranges to whitelist, in one of the following forms:
+
+      exact_string    An exact string to match against the remote IP (i.e. ::1 or 127.0.0.1)
+      n.n.n.n/x       A netblock in CIDR form, like 192.168.1.0/24
+      n.n.n.n-y.y.y.y A range of IPs to block, in sequential order
+
+   The enclosed setblocks.rb and removeblocks.rb ruby scripts are good
+   examples on how to add blocks to memcache. Note that keys can fall
+   out of cache! It's a good idea to refresh the list periodically and
+   to run a dedicated set of servers to manage blocks.
+
+PREFIX:b:n	   (where 0 < n < max_blocks-1)     "blacklist"
+
+   The list of ranges to blacklist, in the same format as the
+   whitelist.  If the user is in the whitelist and the blacklist, the
+   whitelist takes precedence. 
+
+PREFIX:c:IP_ADDRESS:response_code          "counter"
+PREFIX:t:IP_ADDRESS:response_code          "last_time"
+
+   These two keys track the last time (l) and number of times (c) the
+   response code has been hit by an IP.
+
+PREFIX:d:IP_ADDRESS                        "Deny"
+
+   If this memcache key exists, access is denied to the site. The
+   difference between this key, and the blacklist (b) key, is that
+   this key is automatically created with a TTL of MBExpiration when
+   the response count (as specified in MBRateLimit) is exceeded. When
+   the key expires from cache, the IP address is allowed back in.
+
+== KNOWN BUGS
+
+   * Recovery after a memcached server dies isn't very good. If this module cannot connect to memcached, it will fail open. Errors will appear in the apache error log.
