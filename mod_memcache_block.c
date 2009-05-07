@@ -95,7 +95,7 @@ typedef struct mb_cfg {
 typedef struct mb_ratelimiter {
   int response_code; /* HTTP response code */
   int count;         /* max count */
-  int seconds;       /* duration of timeframe */
+  int time;       /* duration of timeframe */
 } mb_ratelimiter;
 
 /* module-private memory pool - mutexes go here as this is global. */
@@ -457,10 +457,10 @@ static int mb_access_checker(request_rec *r)
   sconf = our_sconfig(r->server);
 
   /* before we perform our lookup, is it time to refresh the table? */
-    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
+  /*    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
 	       "blocklist timers %d %d %d %d ",time(NULL), sconf->blocklist_last_refresh, sconf->refresh,
 	       (time(NULL) - sconf->blocklist_last_refresh));
- 
+  */
 
   if ((time(NULL) - sconf->blocklist_last_refresh) > sconf->refresh ) {
     mb_refresh_blocklist(r->server);
@@ -500,6 +500,8 @@ static int mb_logger(request_rec *r)
   char key[255];
   char lastkey[255];
   char time_s[16];
+  char *lasttime;
+  int lasttime_n;
   char *one_s = "1";
   memcached_result_st rv;
   memcached_return mc_error;
@@ -512,7 +514,7 @@ static int mb_logger(request_rec *r)
     rl = apr_hash_get(sconf->response_limiter,status,APR_HASH_KEY_STRING);
     if (rl != NULL) {
       ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
-		   "Found limiter for response %d, count %d, time %d",rl->response_code,rl->count,rl->seconds);
+		   "Found limiter for response %d, count %d, time %d",rl->response_code,rl->count,rl->time);
 
       /* update memcache */
       snprintf(key, 254, "%s:c:%s:%d",sconf->prefix,r->connection->remote_ip,rl->response_code);
@@ -522,12 +524,16 @@ static int mb_logger(request_rec *r)
       mc_error = memcached_increment(mb_memcache, key, strlen(key), 1, &count);
 
       if (mc_error == MEMCACHED_NOTFOUND) { 
-	mc_error = memcached_set(mb_memcache, key, strlen(key), one_s, strlen(one_s), 0 , 0);
+	/* theory: 
+	 * first hit sets up the expiry time to be rl->time based on configuration
+	 * if user hits this key over and over, it'll increment. 
+	 * if they back off, it'll expire. 
+	 */
+	mc_error = memcached_set(mb_memcache, key, strlen(key), one_s, strlen(one_s), rl->time , 0);
 	count = 1;
-	/* this is the first time for this code, store time in last_access field */
-	mc_error = memcached_set(mb_memcache, lastkey, strlen(lastkey), time_s, strlen(time_s), 0 , 0);
-      } else {
-	/* TODO: it was found. if the record is too old, clear the counter and skip the next step */
+
+	/* this is the first time for this code, store time in last_access field - is this necessary? */
+	mc_error = memcached_set(mb_memcache, lastkey, strlen(lastkey), time_s, strlen(time_s), rl->time, 0);
       }
 
       if (mc_error != MEMCACHED_SUCCESS && mc_error != MEMCACHED_NOTFOUND) {
@@ -551,10 +557,8 @@ static int mb_logger(request_rec *r)
 	  
 	} else {
 	  ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
-		       "memcache_block: lockout ip %s, %d %ds in %d interval",r->connection->remote_ip, count, r->status, rl->seconds);
-	  /* TODO: remove counter for this resp code. */
+		       "memcache_block: lockout ip %s, %d %ds in %d interval",r->connection->remote_ip, count, r->status, rl->time);
 	}
-
 	return HTTP_FORBIDDEN;
       }
 
@@ -661,9 +665,9 @@ static const char *set_response_limiter(cmd_parms *cmd, void *dconf, const char 
 
    rl->response_code = atoi(s1);
    rl->count = atoi(s2);
-   rl->seconds = atoi(s3);
+   rl->time = atoi(s3);
    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, s,
-		"Add rate limiter, HTTP Response code %d, %d req in %d seconds",rl->response_code,rl->count,rl->seconds);
+		"Add rate limiter, HTTP Response code %d, %d req in %d seconds",rl->response_code,rl->count,rl->time);
    const char *k1 = apr_pstrdup(mb_private_pool,s1);
 
    apr_hash_set(sconf->response_limiter, k1, APR_HASH_KEY_STRING, rl);
