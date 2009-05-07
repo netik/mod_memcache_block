@@ -9,41 +9,40 @@ mod_memcache_block is an Apache module that allows you to block access to your s
 
 == FEATURES
 
- * Distributed White and Black listing of IPs, ranges, and CIDR blocks
+* Distributed White and Black listing of IPs, ranges, and CIDR blocks
 
- * Configurable timeouts, memcache server listings
+* Configurable timeouts, memcache server listings
    
- * Support for continuous hasing using libmemcached's Ketama
+* Support for continuous hasing using libmemcached's Ketama
 
- * Windowded Rate limiting based on Response code (to block brute-force dictionary attacks against .htpasswd, for example)
+* Windowded Rate limiting based on Response code (to block brute-force dictionary attacks against .htpasswd, for example)
 
 == REQUIREMENTS
 
- * libmemcached-0.25 or better
+* libmemcached-0.25 or better
 
- * Memcached server 
+* Memcached server 
 
- * Apache 2.x (tested with 2.2.11)
+* Apache 2.x (tested with 2.2.11)
 
 == INSTALLATION
 
- #. Install libmemcached-0.25 or better.
+#. Install libmemcached-0.25 or better.
 
- #. Install memcached-1.26
+#. Install memcached-1.26
 
- #. Edit the Makefile to indicate the location of libmemcached
+#. Edit the Makefile to indicate the location of libmemcached
 
- #. Type "make", then "make install"
+#. Type "make", then "make install"
 
- #. Update your apache configuration
+#. Update your apache configuration
 
- #. Restart the server with apachectl restart
+#. Restart the server with apachectl restart
 
 == CONFIGURATION
 
 The following configuration directives are used by mod_memcache_block:
 
-{{{
 MBEnable On|Off
        Default: On
        On or Off, controls if this module is enabled or not (default on)
@@ -81,27 +80,24 @@ MBResponseLimit CODE COUNT PERIOD
        If the module receives more than COUNT responses with HTTP
        response code CODE within PERIOD seconds, add the IP to memcache
        with a TTL of MBExpiration seconds. 
-}}}
 
 == EXAMPLE
 
 Add the following lines to your Apache configuration, in the global area. Only one configuration may exist. 
 
-{{{
-<IfModule memcache_block_module>
-MBEnable On
-# You must set timeout BEFORE the server list.  If you want to have
-# different timeouts for different sets of servers, just change it
-# before adding more servers.
-MBTimeout 2
-MBServers 127.0.0.1:11211
-MBPrefix block
-MBExpiration 3600
-# if you change the size of MaxBlocks, you must restart the server.
-MBMaxBlocks 10
-MBRateLimitByResult 401 20 3600
-</IfModule>
-}}}
+ <IfModule memcache_block_module>
+ MBEnable On
+ # You must set timeout BEFORE the server list.  If you want to have
+ # different timeouts for different sets of servers, just change it
+ # before adding more servers.
+ MBTimeout 2
+ MBServers 127.0.0.1:11211
+ MBPrefix block
+ MBExpiration 3600
+ # if you change the size of MaxBlocks, you must restart the server.
+ MBMaxBlocks 10
+ MBRateLimitByResult 401 20 3600
+ </IfModule>
 
 == KEY STORAGE
 
@@ -142,4 +138,4 @@ PREFIX:d:IP_ADDRESS                        "Deny"
 
 == KNOWN BUGS
 
-   * Recovery after a memcached server dies isn't very good. If this module cannot connect to memcached, it will fail open. Errors will appear in the apache error log.
+* Recovery after a memcached server dies isn't very good. If this module cannot connect to memcached, it will fail open. Errors will appear in the apache error log.
