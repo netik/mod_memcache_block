@@ -78,7 +78,7 @@ MBMaxBlocks n
 
 MBRateLimit On|Off
        Default: On
-       Whether or not the module honors ResponseLimit directives.
+       Whether or not the module honors MBResponseLimit directives.
 
 MBResponseLimit CODE COUNT PERIOD
        If the module receives more than COUNT responses with HTTP

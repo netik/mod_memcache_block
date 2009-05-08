@@ -456,6 +456,9 @@ static int mb_access_checker(request_rec *r)
 
   sconf = our_sconfig(r->server);
 
+  if (sconf->enable == 0) 
+    return DECLINED;
+
   /* before we perform our lookup, is it time to refresh the table? */
   /*    ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
 	       "blocklist timers %d %d %d %d ",time(NULL), sconf->blocklist_last_refresh, sconf->refresh,
@@ -465,18 +468,6 @@ static int mb_access_checker(request_rec *r)
   if ((time(NULL) - sconf->blocklist_last_refresh) > sconf->refresh ) {
     mb_refresh_blocklist(r->server);
   }
-  
-  /* do we have an entry in the lockout memcache */
-  snprintf(key, 254, "%s:d:%s",sconf->prefix,r->connection->remote_ip);
-  result = memcached_get(mb_memcache, key, strlen(key), &len, &flags, &mc_error);
-
-  if (result) { 
-    if (*result == '1') {
-      ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
-		   "Deny IP %s (ratelimit)",r->connection->remote_ip);
-      return HTTP_FORBIDDEN;
-    }
-  }
 
   /* do we have an entry in the blacklist? */
   if ((apr_table_do(mb_check_ip, r->connection->remote_ip, blacklist_table, NULL) == FALSE) && 
@@ -484,9 +475,23 @@ static int mb_access_checker(request_rec *r)
     ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
 		 "Deny IP %s (blacklist)",r->connection->remote_ip,key);
     return HTTP_FORBIDDEN;
-  } else {
-   return DECLINED;
   }
+
+  if (sconf->ratelimit_enable) { 
+    /* do we have an entry in the lockout memcache */
+    snprintf(key, 254, "%s:d:%s",sconf->prefix,r->connection->remote_ip);
+    result = memcached_get(mb_memcache, key, strlen(key), &len, &flags, &mc_error);
+    
+    if (result) { 
+      if (*result == '1') {
+      ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
+		   "Deny IP %s (ratelimit)",r->connection->remote_ip);
+      return HTTP_FORBIDDEN;
+      }
+    }
+  }
+
+  return DECLINED;
 }
 
 static int mb_logger(request_rec *r)
@@ -509,33 +514,40 @@ static int mb_logger(request_rec *r)
   char *status = apr_itoa(r->pool, r->status);
   sconf = our_sconfig(r->server);
 
-  /* Are we tracking this response? */
+  if ((sconf->enable == 0) ||  (sconf->ratelimit_enable == 0)) 
+    return DECLINED;
+
+  /* this code only fires if we are enabled and we're ratelimiting this status code. */
   if (r->status > 0) {
     rl = apr_hash_get(sconf->response_limiter,status,APR_HASH_KEY_STRING);
+
     if (rl != NULL) {
       ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
 		   "Found limiter for response %d, count %d, time %d",rl->response_code,rl->count,rl->time);
 
-      /* update memcache */
+      /* Update counters
+       *
+       * first hit sets up the expiry time to be rl->time based on configuration
+       * continual hits increment the key. Increment doesn't update the key's TTL (memcached issue)
+       * if they back off, it'll expire. 
+       * 
+       * known bug: if hits take place across two time periods, we won't block. 
+       */
+
       snprintf(key, 254, "%s:c:%s:%d",sconf->prefix,r->connection->remote_ip,rl->response_code);
       snprintf(lastkey, 254, "%s:l:%s:%d",sconf->prefix,r->connection->remote_ip,rl->response_code);
       snprintf(time_s, 15, "%d",time(NULL));
-
+      
       mc_error = memcached_increment(mb_memcache, key, strlen(key), 1, &count);
-
+      
       if (mc_error == MEMCACHED_NOTFOUND) { 
-	/* theory: 
-	 * first hit sets up the expiry time to be rl->time based on configuration
-	 * if user hits this key over and over, it'll increment. 
-	 * if they back off, it'll expire. 
-	 */
 	mc_error = memcached_set(mb_memcache, key, strlen(key), one_s, strlen(one_s), rl->time , 0);
 	count = 1;
-
+	
 	/* this is the first time for this code, store time in last_access field - is this necessary? */
 	mc_error = memcached_set(mb_memcache, lastkey, strlen(lastkey), time_s, strlen(time_s), rl->time, 0);
       }
-
+      
       if (mc_error != MEMCACHED_SUCCESS && mc_error != MEMCACHED_NOTFOUND) {
 	ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
 		     "Memcache Error: key %s: %s",key, memcached_strerror(mb_memcache,mc_error));
@@ -544,27 +556,24 @@ static int mb_logger(request_rec *r)
 	ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
 		     "memcache_block: key %s count=%d",key, count);
       }
-
+      
       /* check limits */
       if (count > rl->count) {
 	/* insert block */
 	snprintf(key, 254, "%s:d:%s",sconf->prefix,r->connection->remote_ip); 
 	mc_error = memcached_set(mb_memcache, key, strlen(key), one_s, strlen(one_s), sconf->expiration , 0);
-
+	
 	if (mc_error != MEMCACHED_SUCCESS) { 
 	  ap_log_error(APLOG_MARK, APLOG_ERR, 0, r->server,
-		       "Memcache Error (in lockout): key %s: %s",key, memcached_strerror(mb_memcache,mc_error));
-	  
+			 "Memcache Error (in lockout): key %s: %s",key, memcached_strerror(mb_memcache,mc_error));
 	} else {
 	  ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, r->server,
 		       "memcache_block: lockout ip %s, %d %ds in %d interval",r->connection->remote_ip, count, r->status, rl->time);
 	}
 	return HTTP_FORBIDDEN;
       }
-
     }
   }
-
   return DECLINED;
 }
 

@@ -117,4 +117,4 @@ mod_memcache_block writes and uses many keys in memcache. They are:
 
 == KNOWN BUGS
 
-* Recovery after a memcached server dies isn't very good. If this module cannot connect to memcached, it will fail open. Errors will appear in the apache error log.
+* If all memcache servers die and this module cannot connect to memcached, it will fail open (which, in our opinion, is the right thing to do.) Errors will appear in the apache error log.

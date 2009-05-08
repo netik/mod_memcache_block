@@ -17,15 +17,14 @@ require 'memcache'
 }
 
 @cache = MemCache.new(@servers,@options)
-#
-# per robey: marshall must be set to false otherwise we'll feed marshalled data to apache
-# and apache doesn't work with marshalled data.
-#
 
-
+# remove the blocks set by setblocks.rb
 for x in 1..4 
   @cache.delete("mb:b:#{x}")
 end
+
+# remove our test whitelist entry
+@cache.delete("mb:w:1")
 
 puts "blocks deleted."
 
