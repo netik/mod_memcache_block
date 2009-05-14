@@ -1,13 +1,9 @@
 Mod_memcache_block TODO's
 ----------------------------
 
-- Fix limiter code: fix intervals, it locks out after n hits and dies
+Write some nicer management code in Ruby that can talk to memcache and show
 
-- zero out counter key whenever we insert an L key, because we no longer need it. 
-  - zero out counter when date expiry reached. 
-
-- make sure keys expire at the right time
-
+Figure out a hack for tracking address that we've blacklisted so we can show them to support, or, make a query tool.
 
 
 
